@@ -30,7 +30,7 @@ async function run(): Promise<void> {
     const parent =
       core.getInput('parent', { required: false }) === 'false' ? false : true;
     const glob = core.getInput('glob');
-    const concurrency = core.getInput('concurrency');
+    const concurrency = Number(core.getInput('concurrency')) || 100;
     const predefinedAcl =
       predefinedAclInput === ''
         ? undefined
@@ -44,7 +44,7 @@ async function run(): Promise<void> {
       gzip,
       parent,
       predefinedAcl,
-      Number(concurrency),
+      concurrency,
     );
 
     core.setOutput(
