@@ -5825,6 +5825,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const core = __importStar(__webpack_require__(470));
 const client_1 = __webpack_require__(976);
+const headers_1 = __webpack_require__(467);
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
@@ -5840,9 +5841,13 @@ function run() {
             const predefinedAcl = predefinedAclInput === ''
                 ? undefined
                 : predefinedAclInput;
+            const headersInput = core.getInput('headers', {
+                required: false,
+            });
+            const metadata = headersInput === '' ? undefined : headers_1.parseHeadersInput(headersInput);
             const serviceAccountKey = core.getInput('credentials');
             const client = new client_1.Client({ credentials: serviceAccountKey });
-            const uploadResponses = yield client.upload(destination, path, gzip, resumable, predefinedAcl);
+            const uploadResponses = yield client.upload(destination, path, gzip, resumable, predefinedAcl, metadata);
             core.setOutput('uploaded', uploadResponses
                 .map((uploadResponse) => uploadResponse[0].name)
                 .toString());
@@ -17527,7 +17532,7 @@ class UploadHelper {
      * @param destination The destination prefix.
      * @returns The UploadResponse which contains the file and metadata.
      */
-    uploadFile(bucketName, filename, gzip, resumable, destination, predefinedAcl) {
+    uploadFile(bucketName, filename, gzip, resumable, destination, predefinedAcl, metadata) {
         return __awaiter(this, void 0, void 0, function* () {
             const options = { gzip, predefinedAcl };
             if (destination) {
@@ -17537,6 +17542,9 @@ class UploadHelper {
             if (resumable) {
                 options.resumable = true;
                 options.configPath = path.join(os.tmpdir(), `upload-cloud-storage-${process.hrtime.bigint()}.json`);
+            }
+            if (metadata) {
+                options.metadata = metadata;
             }
             const uploadedFile = yield this.storage
                 .bucket(bucketName)
@@ -17554,7 +17562,7 @@ class UploadHelper {
      * @param resumable Allow resuming uploads.
      * @returns The list of UploadResponses which contains the file and metadata.
      */
-    uploadDirectory(bucketName, directoryPath, gzip, resumable, prefix = '', predefinedAcl) {
+    uploadDirectory(bucketName, directoryPath, gzip, resumable, prefix = '', predefinedAcl, metadata) {
         return __awaiter(this, void 0, void 0, function* () {
             const pathDirName = path.posix.dirname(directoryPath);
             // Get list of files in the directory.
@@ -17566,7 +17574,7 @@ class UploadHelper {
                 if (prefix) {
                     destination = `${prefix}/${destination}`;
                 }
-                const uploadResp = yield this.uploadFile(bucketName, filePath, gzip, resumable, destination, predefinedAcl);
+                const uploadResp = yield this.uploadFile(bucketName, filePath, gzip, resumable, destination, predefinedAcl, metadata);
                 return uploadResp;
             })));
             return resp;
@@ -38539,7 +38547,104 @@ bufferEq.restore = function() {
 /* 464 */,
 /* 465 */,
 /* 466 */,
-/* 467 */,
+/* 467 */
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+/*
+ * Copyright 2021 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const core = __importStar(__webpack_require__(470));
+const customMetadataPrefix = 'x-goog-meta-';
+function parseSingleHeaderLine(input) {
+    const parts = input.split(':');
+    const name = parts[0].trim().toLowerCase();
+    const value = parts
+        .splice(1)
+        .join(':')
+        .trim();
+    return [name, value];
+}
+function parseHeaderLines(input) {
+    const headerPairs = input
+        .split(/\r?\n/)
+        .filter((line) => line.trim())
+        .map((line) => parseSingleHeaderLine(line));
+    return new Map(headerPairs);
+}
+/**
+ * Parses multiline headers input to expected metadata object
+ * by the GCS library.
+ *
+ * Custom metadata must be prefixed with `x-goog-meta-`. Invalid
+ * headers are ignored and logged as warning.
+ *
+ * @param input Multiline string with headers.
+ * @returns The parsed metadata object.
+ */
+function parseHeadersInput(input) {
+    const headers = parseHeaderLines(input);
+    const metadata = {};
+    headers.forEach((value, key) => {
+        if (key.startsWith(customMetadataPrefix)) {
+            if (!metadata.metadata) {
+                metadata.metadata = {};
+            }
+            metadata.metadata[key.slice(customMetadataPrefix.length)] = value;
+        }
+        else {
+            switch (key) {
+                case 'cache-control':
+                    metadata.cacheControl = value;
+                    break;
+                case 'content-disposition':
+                    metadata.contentDisposition = value;
+                    break;
+                case 'content-encoding':
+                    metadata.contentEncoding = value;
+                    break;
+                case 'content-language':
+                    metadata.contentLanguage = value;
+                    break;
+                case 'content-type':
+                    metadata.contentType = value;
+                    break;
+                case 'custom-time':
+                    metadata.customTime = value;
+                    break;
+                default:
+                    core.warning(`Invalid header specified: ${key}`);
+                    break;
+            }
+        }
+    });
+    return metadata;
+}
+exports.parseHeadersInput = parseHeadersInput;
+
+
+/***/ }),
 /* 468 */,
 /* 469 */
 /***/ (function() {
@@ -64815,7 +64920,7 @@ class Client {
      * @param prefix Optional prefix when uploading to GCS.
      * @returns List of uploaded file(s).
      */
-    upload(destination, path, gzip, resumable, predefinedAcl) {
+    upload(destination, path, gzip, resumable, predefinedAcl, metadata) {
         return __awaiter(this, void 0, void 0, function* () {
             let bucketName = destination;
             let prefix = '';
@@ -64828,11 +64933,11 @@ class Client {
             const stat = yield fs.promises.stat(path);
             const uploader = new upload_helper_1.UploadHelper(this.storage);
             if (stat.isFile()) {
-                const uploadedFile = yield uploader.uploadFile(bucketName, path, gzip, resumable, prefix, predefinedAcl);
+                const uploadedFile = yield uploader.uploadFile(bucketName, path, gzip, resumable, prefix, predefinedAcl, metadata);
                 return [uploadedFile];
             }
             else {
-                const uploadedFiles = yield uploader.uploadDirectory(bucketName, path, gzip, resumable, prefix, predefinedAcl);
+                const uploadedFiles = yield uploader.uploadDirectory(bucketName, path, gzip, resumable, prefix, predefinedAcl, metadata);
                 return uploadedFiles;
             }
         });

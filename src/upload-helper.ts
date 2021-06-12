@@ -25,6 +25,7 @@ import {
   UploadResponse,
 } from '@google-cloud/storage';
 import { getFiles } from './util';
+import { Metadata } from './headers';
 
 /**
  * Wraps interactions with the the GCS library.
@@ -60,6 +61,7 @@ export class UploadHelper {
     resumable: boolean,
     destination?: string,
     predefinedAcl?: PredefinedAcl,
+    metadata?: Metadata,
   ): Promise<UploadResponse> {
     const options: UploadOptions = { gzip, predefinedAcl };
     if (destination) {
@@ -72,6 +74,9 @@ export class UploadHelper {
         os.tmpdir(),
         `upload-cloud-storage-${process.hrtime.bigint()}.json`,
       );
+    }
+    if (metadata) {
+      options.metadata = metadata;
     }
 
     const uploadedFile = await this.storage
@@ -97,6 +102,7 @@ export class UploadHelper {
     resumable: boolean,
     prefix = '',
     predefinedAcl?: PredefinedAcl,
+    metadata?: Metadata,
   ): Promise<UploadResponse[]> {
     const pathDirName = path.posix.dirname(directoryPath);
     // Get list of files in the directory.
@@ -120,6 +126,7 @@ export class UploadHelper {
           resumable,
           destination,
           predefinedAcl,
+          metadata,
         );
         return uploadResp;
       }),

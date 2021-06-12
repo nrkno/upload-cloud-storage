@@ -16,6 +16,7 @@
 
 import * as fs from 'fs';
 import { UploadHelper } from './upload-helper';
+import { Metadata } from './headers';
 import {
   Storage,
   UploadResponse,
@@ -73,6 +74,7 @@ export class Client {
     gzip: boolean,
     resumable: boolean,
     predefinedAcl?: PredefinedAcl,
+    metadata?: Metadata,
   ): Promise<UploadResponse[]> {
     let bucketName = destination;
     let prefix = '';
@@ -93,6 +95,7 @@ export class Client {
         resumable,
         prefix,
         predefinedAcl,
+        metadata,
       );
       return [uploadedFile];
     } else {
@@ -103,6 +106,7 @@ export class Client {
         resumable,
         prefix,
         predefinedAcl,
+        metadata,
       );
       return uploadedFiles;
     }
